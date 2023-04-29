@@ -9,4 +9,9 @@ public class BrickController : MonoBehaviour
             Destroy(gameObject);
         }
     }
+    
+    public void DestroyBrick()
+    {
+        Destroy(gameObject);
+    }
 }

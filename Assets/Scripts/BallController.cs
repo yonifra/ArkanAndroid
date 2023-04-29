@@ -1,67 +1,97 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class BallController : MonoBehaviour
 {
-    public float speed = 10f;                   // ball speed
-    public Vector2 startDirection = Vector2.up; // starting direction of the ball
-    private Rigidbody2D rb2d;                   // rigidbody component
-    public float hitFactor = 0.5f;              // hit factor
+    public float moveSpeed = 10f; // speed of the ball
+    public float maxSpeed = 20f; // maximum speed of the ball
+    public float minAngle = 15f; // minimum angle of deflection when hitting the player
+    public float maxAngle = 75f; // maximum angle of deflection when hitting the player
+    public float randomAngleRange = 15f; // range of random angle added to the deflection angle when hitting the player
+
+    private Rigidbody2D rb; // rigidbody component of the ball
+    private Vector2 direction; // current direction of the ball's movement
 
     void Start()
     {
-        // get the Rigidbody2D component
-        rb2d = GetComponent<Rigidbody2D>();
-        
-        // set the ball's velocity to the starting direction
-        startDirection.Normalize();
-        rb2d.velocity = startDirection * speed;
+        // get the rigidbody component
+        rb = GetComponent<Rigidbody2D>();
+
+        // set the initial direction of the ball to move up and to the right
+        direction = new Vector2(1, 1).normalized;
     }
 
-    void FixedUpdate()
+    void Update()
     {
-        // limit the ball's maximum speed
-        if (rb2d.velocity.magnitude > speed)
+        // move the ball based on its direction and speed
+        Vector2 velocity = direction * moveSpeed;
+        rb.velocity = velocity;
+
+        // clamp the speed of the ball to the maximum speed
+        if (rb.velocity.magnitude > maxSpeed)
         {
-            rb2d.velocity = rb2d.velocity.normalized * speed;
+            rb.velocity = rb.velocity.normalized * maxSpeed;
         }
     }
 
     void OnCollisionEnter2D(Collision2D collision)
     {
-        // calculate the new direction for the ball
-        Vector2 newDirection = Vector2.zero;
+        // if the ball hits the player, deflect it based on the point of contact
         if (collision.gameObject.CompareTag("Player"))
         {
-            // ball hit the player, bounce up
-            newDirection = Vector2.up;
-            // add horizontal velocity based on where the ball hit the paddle
-            float hitPosition = (collision.transform.position.x - transform.position.x) / collision.collider.bounds.size.x;
-            newDirection.x = hitPosition * hitFactor;
+            // calculate the deflection angle based on the point of contact on the player
+            Vector2 contactPoint = collision.contacts[0].point;
+            Vector2 playerPosition = collision.transform.position;
+            float angle = Mathf.Abs(contactPoint.x - playerPosition.x) / collision.collider.bounds.size.x * (maxAngle - minAngle) + minAngle;
+
+            // add a random angle to the deflection angle
+            float randomAngle = Random.Range(-randomAngleRange, randomAngleRange);
+            angle += randomAngle;
+
+            // calculate the new direction of the ball's movement based on the deflection angle
+            direction = new Vector2(Mathf.Cos(angle * Mathf.Deg2Rad), Mathf.Sin(angle * Mathf.Deg2Rad)).normalized;
         }
+        // if the ball hits a brick, destroy the brick and deflect the ball
         else if (collision.gameObject.CompareTag("Brick"))
         {
-            // ball hit a brick, bounce off
-            newDirection = rb2d.velocity.normalized;
-            Destroy(collision.gameObject);
+            Vector2 contactPoint = collision.GetContact(0).point;
+            Vector2 ballPosition = transform.position;
+            float collisionAngle = Vector2.Angle(contactPoint - ballPosition, Vector2.up);
+            float xDirection = (contactPoint.x > ballPosition.x) ? 1 : -1;
+
+            // Adjust the direction of the ball based on the angle of the collision
+            Vector2 newDirection = new Vector2(Mathf.Sin(collisionAngle * Mathf.Deg2Rad), Mathf.Cos(collisionAngle * Mathf.Deg2Rad));
+            if (newDirection.x > 0)
+            {
+                newDirection.x = Mathf.Clamp(newDirection.x, 0.5f, 1);
+            }
+            else
+            {
+                newDirection.x = Mathf.Clamp(newDirection.x, -1, -0.5f);
+            }
+
+            // Update the velocity of the ball
+            GetComponent<Rigidbody2D>().velocity = newDirection * moveSpeed * xDirection;
+        
+            // Destroy the brick
+            BrickController brickController = collision.gameObject.GetComponent<BrickController>();
+            brickController.DestroyBrick();
+            DeflectBall(collision.contacts[0].normal);
         }
+        // if the ball hits any other object, deflect it based on the surface normal
         else
         {
-            // ball hit a wall, bounce off
-            newDirection = Vector2.Reflect(rb2d.velocity.normalized, collision.contacts[0].normal);
+            DeflectBall(collision.contacts[0].normal);
         }
 
-        // apply the new direction to the ball's velocity
-        rb2d.velocity = newDirection * speed;
+        // play a sound effect when the ball hits something
+        // AudioManager.Instance.PlaySoundEffect("Hit");
     }
-    
-    void OnTriggerEnter2D(Collider2D other)
+
+    private void DeflectBall(Vector2 normal)
     {
-        if (other.gameObject.CompareTag("BottomBoundry"))
-        {
-            // ball hit the bottom boundary, end the game
-            Debug.Log("Game over!");
-            // you can add additional game over logic here, such as showing a game over screen or resetting the game
-        }
+        // reflect the direction of the ball's movement based on the surface normal
+        direction = Vector2.Reflect(direction, normal).normalized;
     }
-
 }
