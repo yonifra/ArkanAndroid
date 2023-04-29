@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class BallController : MonoBehaviour
@@ -12,6 +10,7 @@ public class BallController : MonoBehaviour
 
     private Rigidbody2D rb; // rigidbody component of the ball
     private Vector2 direction; // current direction of the ball's movement
+    private AudioSource audioSource; // audio source component
 
     void Start()
     {
@@ -20,6 +19,8 @@ public class BallController : MonoBehaviour
 
         // set the initial direction of the ball to move up and to the right
         direction = new Vector2(1, 1).normalized;
+        
+        audioSource = GetComponent<AudioSource>();
     }
 
     void Update()
@@ -86,7 +87,18 @@ public class BallController : MonoBehaviour
         }
 
         // play a sound effect when the ball hits something
-        // AudioManager.Instance.PlaySoundEffect("Hit");
+        audioSource.Play();
+    }
+    
+    void OnTriggerEnter2D(Collider2D other)
+    {
+        if (other.gameObject.CompareTag("BottomBoundry"))
+        {
+            // ball hit the bottom boundary, end the game
+            Debug.Log("Game over!");
+            audioSource.Play();
+            // you can add additional game over logic here, such as showing a game over screen or resetting the game
+        }
     }
 
     private void DeflectBall(Vector2 normal)

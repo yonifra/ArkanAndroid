@@ -41,9 +41,6 @@ public class PlayerController : MonoBehaviour
             transform.position += new Vector3(move * speed * Time.deltaTime, 0, 0);
         }
 
-    
-        
-        
         // limit the player's position to within the screen bounds
         // calculate the minimum and maximum x coordinates of the screen bounds
         float screenMinX = -screenBounds.x;
@@ -55,8 +52,7 @@ public class PlayerController : MonoBehaviour
         // print out the player's position for debugging
         // Debug.Log("Player position: " + transform.position);
     }
-
-
+    
     void FixedUpdate()
     {
         // move the player based on touch input
