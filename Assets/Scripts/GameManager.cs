@@ -229,7 +229,7 @@ public class GameManager : MonoBehaviour
 
     public void RestartLevel()
     {
-        Debug.Log("Restarting level...");
+        Debug.Log("[GameManager] RestartLevel() method called!");
 
         // Reset game state
         isGameActive = true;
@@ -238,18 +238,21 @@ public class GameManager : MonoBehaviour
         // Hide UI
         if (uiManager != null)
         {
+            Debug.Log("[GameManager] Hiding level complete UI");
             uiManager.HideLevelComplete();
         }
 
         // Reload the current scene
+        Debug.Log("[GameManager] Loading scene...");
         UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 
     public void NextLevel()
     {
-        Debug.Log("Loading next level...");
+        Debug.Log("[GameManager] NextLevel() method called!");
         // For now, just restart the same level
         // In a full game, you would load the next scene/level here
+        Debug.Log("[GameManager] Next level functionality: restarting current level");
         RestartLevel();
     }
 

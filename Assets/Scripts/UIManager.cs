@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 public class UIManager : MonoBehaviour
 {
@@ -38,13 +39,27 @@ public class UIManager : MonoBehaviour
             gameOverPanel.SetActive(false);
         }
 
-        // Setup button functionality
+        // Setup button functionality - moved to be called after UI creation
         SetupButtons();
     }
 
     void CreateLevelCompleteUI()
     {
         Debug.Log("[UIManager] CreateLevelCompleteUI started");
+
+        // Ensure EventSystem exists for UI interaction
+        UnityEngine.EventSystems.EventSystem eventSystem = FindObjectOfType<UnityEngine.EventSystems.EventSystem>();
+        if (eventSystem == null)
+        {
+            Debug.Log("[UIManager] No EventSystem found, creating new one");
+            GameObject eventSystemGO = new GameObject("EventSystem");
+            eventSystemGO.AddComponent<UnityEngine.EventSystems.EventSystem>();
+            eventSystemGO.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+        }
+        else
+        {
+            Debug.Log($"[UIManager] Using existing EventSystem: {eventSystem.gameObject.name}");
+        }
 
         // Find or create Canvas
         Canvas canvas = FindObjectOfType<Canvas>();
@@ -122,6 +137,9 @@ public class UIManager : MonoBehaviour
 
         // Create Next Level button
         CreateButton("NextLevelButton", "NEXT LEVEL", new Vector2(0.55f, 0.2f), new Vector2(0.8f, 0.35f), panel.transform);
+
+        // Setup button event listeners after buttons are created
+        SetupButtons();
     }
 
     void CreateButton(string name, string text, Vector2 anchorMin, Vector2 anchorMax, Transform parent)
@@ -133,6 +151,14 @@ public class UIManager : MonoBehaviour
         buttonImage.color = new Color(0.2f, 0.6f, 1f, 0.8f); // Light blue
 
         Button button = buttonGO.AddComponent<Button>();
+
+        // Set up button colors for visual feedback
+        ColorBlock colors = button.colors;
+        colors.normalColor = new Color(0.2f, 0.6f, 1f, 0.8f);
+        colors.highlightedColor = new Color(0.3f, 0.7f, 1f, 1f);
+        colors.pressedColor = new Color(0.1f, 0.5f, 0.9f, 1f);
+        colors.disabledColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+        button.colors = colors;
 
         RectTransform buttonRect = buttonGO.GetComponent<RectTransform>();
         buttonRect.anchorMin = anchorMin;
@@ -171,26 +197,50 @@ public class UIManager : MonoBehaviour
 
     void SetupButtons()
     {
+        Debug.Log($"[UIManager] SetupButtons called. Restart button exists: {restartButton != null}, Next Level button exists: {nextLevelButton != null}");
+
         if (restartButton != null)
         {
             restartButton.onClick.RemoveAllListeners();
             restartButton.onClick.AddListener(() => {
+                Debug.Log("[UIManager] Restart button clicked!");
                 if (GameManager.Instance != null)
                 {
+                    Debug.Log("[UIManager] Calling GameManager.RestartLevel()");
                     GameManager.Instance.RestartLevel();
                 }
+                else
+                {
+                    Debug.LogError("[UIManager] GameManager.Instance is null when restart button clicked!");
+                }
             });
+            Debug.Log("[UIManager] Restart button event listener added successfully");
+        }
+        else
+        {
+            Debug.LogWarning("[UIManager] Restart button is null - cannot setup event listener");
         }
 
         if (nextLevelButton != null)
         {
             nextLevelButton.onClick.RemoveAllListeners();
             nextLevelButton.onClick.AddListener(() => {
+                Debug.Log("[UIManager] Next Level button clicked!");
                 if (GameManager.Instance != null)
                 {
+                    Debug.Log("[UIManager] Calling GameManager.NextLevel()");
                     GameManager.Instance.NextLevel();
                 }
+                else
+                {
+                    Debug.LogError("[UIManager] GameManager.Instance is null when next level button clicked!");
+                }
             });
+            Debug.Log("[UIManager] Next Level button event listener added successfully");
+        }
+        else
+        {
+            Debug.LogWarning("[UIManager] Next Level button is null - cannot setup event listener");
         }
     }
 
@@ -203,6 +253,14 @@ public class UIManager : MonoBehaviour
             Debug.Log("[UIManager] Activating level complete panel");
             levelCompletePanel.SetActive(true);
             Debug.Log($"[UIManager] Panel activated. Active state: {levelCompletePanel.activeInHierarchy}");
+            Debug.Log($"[UIManager] Restart button exists: {restartButton != null}, Next Level button exists: {nextLevelButton != null}");
+
+            // Ensure buttons are properly set up
+            if (restartButton == null || nextLevelButton == null)
+            {
+                Debug.LogWarning("[UIManager] Buttons are null after showing panel - calling SetupButtons again");
+                SetupButtons();
+            }
         }
         else
         {
