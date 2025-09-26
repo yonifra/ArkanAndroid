@@ -53,11 +53,12 @@ public class BallController : MonoBehaviour
             rb.linearVelocity = direction * moveSpeed;
         }
 
-        // Clamp the velocity to prevent excessive speed
-        if (rb.linearVelocity.magnitude > maxSpeed)
+        // Clamp the velocity to prevent excessive speed (lower max speed to prevent boundary pass-through)
+        float safeMaxSpeed = Mathf.Min(maxSpeed, 12f); // Reduce max speed for better collision detection
+        if (rb.linearVelocity.magnitude > safeMaxSpeed)
         {
             direction = rb.linearVelocity.normalized;
-            rb.linearVelocity = direction * maxSpeed;
+            rb.linearVelocity = direction * safeMaxSpeed;
         }
 
         // Prevent the ball from getting stuck by ensuring minimum speed
@@ -77,6 +78,32 @@ public class BallController : MonoBehaviour
                 Debug.Log("High speed detected near brick - correcting velocity");
                 rb.linearVelocity = direction * moveSpeed;
             }
+        }
+
+        // Aggressive boundary clamping - absolutely prevent ball from leaving area
+        ClampBallPosition();
+
+        // Check for boundary violations and correct position
+        CheckBoundaryViolations();
+
+        // Predictive boundary checking to catch fast-moving balls
+        CheckPredictiveBoundaryCollision();
+
+        // Final failsafe - absolutely prevent ball from escaping horizontally
+        Vector3 currentPos = transform.position;
+        if (currentPos.x < -8.2f || currentPos.x > 9.5f)
+        {
+            Debug.LogWarning($"EMERGENCY: Ball escaped boundaries at {currentPos.x}! Forcing back inside.");
+            currentPos.x = Mathf.Clamp(currentPos.x, -8.2f, 9.5f);
+            transform.position = currentPos;
+
+            // Force ball to bounce away from boundary
+            if (currentPos.x <= -8.2f && direction.x < 0)
+                direction.x = Mathf.Abs(direction.x);
+            else if (currentPos.x >= 9.5f && direction.x > 0)
+                direction.x = -Mathf.Abs(direction.x);
+
+            rb.linearVelocity = direction * moveSpeed;
         }
 
         // Check if the ball is gone (below a certain point)
@@ -116,6 +143,12 @@ public class BallController : MonoBehaviour
             // Apply the new velocity immediately to ensure responsive physics
             rb.linearVelocity = direction * moveSpeed;
         }
+        // Handle left and right boundary collisions specifically
+        else if (collision.gameObject.CompareTag("LeftBoundary") || collision.gameObject.CompareTag("RightBoundary"))
+        {
+            // Stop the ball's horizontal movement and bounce it back
+            HandleBoundaryCollision(collisionNormal);
+        }
         // Brick collisions are COMPLETELY handled by BrickController
         // Ball ignores brick collisions to prevent double processing
         else if (!collision.gameObject.CompareTag("Brick"))
@@ -146,6 +179,17 @@ public class BallController : MonoBehaviour
                 // you can add additional game over logic here, such as showing a game over screen or resetting the game
             }
         }
+        else if (other.gameObject.CompareTag("LeftBoundary") || other.gameObject.CompareTag("RightBoundary"))
+        {
+            // Handle boundary collision for trigger-based boundaries
+            Vector2 normal;
+            if (other.gameObject.CompareTag("LeftBoundary"))
+                normal = Vector2.right; // Left boundary, bounce right
+            else
+                normal = Vector2.left;  // Right boundary, bounce left
+
+            HandleBoundaryCollision(normal);
+        }
     }
 
     private void DeflectBall(Vector2 normal)
@@ -174,7 +218,53 @@ public class BallController : MonoBehaviour
         direction = newDirection;
     }
 
-    // Public method for brick to call when handling collision
+    private void HandleBoundaryCollision(Vector2 normal)
+    {
+        // Immediately stop the ball to prevent pass-through
+        rb.linearVelocity = Vector2.zero;
+
+        // Ensure the normal is valid and normalized
+        if (normal.magnitude < 0.1f)
+        {
+            // If we don't have a good normal, determine it from ball position
+            if (transform.position.x > 0)
+                normal = Vector2.left;  // Right boundary, bounce left
+            else
+                normal = Vector2.right; // Left boundary, bounce right
+        }
+        else
+        {
+            normal = normal.normalized;
+        }
+
+        // Move ball away from boundary immediately
+        Vector3 pos = transform.position;
+        if (normal.x > 0) // Left boundary collision
+        {
+            pos.x = -8.2f; // Move to safe position inside left boundary
+            direction.x = Mathf.Abs(direction.x); // Ensure rightward movement
+        }
+        else if (normal.x < 0) // Right boundary collision
+        {
+            pos.x = 9.5f;  // Move to safe position inside right boundary
+            direction.x = -Mathf.Abs(direction.x); // Ensure leftward movement
+        }
+
+        // Ensure we have proper vertical movement
+        if (Mathf.Abs(direction.y) < 0.3f)
+        {
+            direction.y = direction.y > 0 ? 0.3f : -0.3f;
+        }
+
+        // Normalize and apply the new direction
+        direction = direction.normalized;
+        transform.position = pos;
+
+        // Apply velocity after a small delay to ensure position is set
+        rb.linearVelocity = direction * moveSpeed;
+
+        Debug.Log($"Boundary collision: Ball moved to {pos.x}, new direction: {direction}");
+    }    // Public method for brick to call when handling collision
     public void HandleBrickCollision(Vector2 collisionNormal)
     {
         // Prevent rapid successive brick hits (should not happen with new system, but extra safety)
@@ -202,7 +292,114 @@ public class BallController : MonoBehaviour
         }
 
         Debug.Log($"Ball bounced: Previous dir = {previousDirection}, New dir = {direction}, Velocity = {rb.linearVelocity}");
-    }    void RestartGame()
+    }
+
+    private void ClampBallPosition()
+    {
+        // Hard boundaries that the ball absolutely cannot cross
+        float leftBoundary = -8.2f;   // Well inside the Left Wall
+        float rightBoundary = 9.5f;   // Well inside the Right Wall
+
+        Vector3 pos = transform.position;
+        bool positionChanged = false;
+
+        // Clamp horizontal position
+        if (pos.x < leftBoundary)
+        {
+            pos.x = leftBoundary;
+            positionChanged = true;
+            // Force ball to bounce right if moving left
+            if (direction.x < 0)
+            {
+                direction.x = -direction.x;
+                rb.linearVelocity = direction * moveSpeed;
+            }
+            Debug.Log("Ball clamped at left boundary");
+        }
+        else if (pos.x > rightBoundary)
+        {
+            pos.x = rightBoundary;
+            positionChanged = true;
+            // Force ball to bounce left if moving right
+            if (direction.x > 0)
+            {
+                direction.x = -direction.x;
+                rb.linearVelocity = direction * moveSpeed;
+            }
+            Debug.Log("Ball clamped at right boundary");
+        }
+
+        if (positionChanged)
+        {
+            transform.position = pos;
+        }
+    }
+
+    private void CheckBoundaryViolations()
+    {
+        // Define the game area boundaries based on actual wall positions
+        float leftBoundary = -8.3f;   // Slightly inside the Left Wall position (-8.57)
+        float rightBoundary = 9.6f;   // Slightly inside the Right Wall position (9.9)
+
+        Vector3 pos = transform.position;
+        bool correctionNeeded = false;
+
+        // Check left boundary - be more aggressive about catching violations
+        if (pos.x <= leftBoundary)
+        {
+            pos.x = leftBoundary + 0.1f; // Move ball inside the boundary
+            if (direction.x < 0) // Only reverse if moving toward boundary
+            {
+                direction.x = Mathf.Abs(direction.x); // Force rightward movement
+            }
+            correctionNeeded = true;
+            Debug.Log("Ball position corrected at left boundary");
+        }
+
+        // Check right boundary - be more aggressive about catching violations
+        if (pos.x >= rightBoundary)
+        {
+            pos.x = rightBoundary - 0.1f; // Move ball inside the boundary
+            if (direction.x > 0) // Only reverse if moving toward boundary
+            {
+                direction.x = -Mathf.Abs(direction.x); // Force leftward movement
+            }
+            correctionNeeded = true;
+            Debug.Log("Ball position corrected at right boundary");
+        }
+
+        if (correctionNeeded)
+        {
+            transform.position = pos;
+            direction = direction.normalized;
+            rb.linearVelocity = direction * moveSpeed;
+        }
+    }
+
+    private void CheckPredictiveBoundaryCollision()
+    {
+        // Cast a ray to predict where the ball will be in the next frame
+        Vector2 currentPos = transform.position;
+        Vector2 predictedPos = currentPos + (rb.linearVelocity * Time.fixedDeltaTime);
+
+        float leftBoundary = -8.3f;
+        float rightBoundary = 9.6f;
+
+        // Check if ball will cross left boundary
+        if (currentPos.x > leftBoundary && predictedPos.x <= leftBoundary && rb.linearVelocity.x < 0)
+        {
+            Debug.Log("Predicted left boundary collision - forcing bounce");
+            HandleBoundaryCollision(Vector2.right);
+        }
+        // Check if ball will cross right boundary
+        else if (currentPos.x < rightBoundary && predictedPos.x >= rightBoundary && rb.linearVelocity.x > 0)
+        {
+            Debug.Log("Predicted right boundary collision - forcing bounce");
+            HandleBoundaryCollision(Vector2.left);
+        }
+    }
+
+    void RestartGame()
     {
         // Reset the ball's position to the starting position
         transform.position = new Vector3(0, -4, 0);
