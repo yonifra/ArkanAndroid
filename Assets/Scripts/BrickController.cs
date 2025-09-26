@@ -72,6 +72,9 @@ public class BrickController : MonoBehaviour
 
         Debug.Log($"[BrickController] Brick {gameObject.name} being destroyed");
 
+        // Spawn coins before destroying the brick
+        SpawnCoins();
+
         // Notify the GameManager that a brick has been destroyed
         if (GameManager.Instance != null)
         {
@@ -106,5 +109,25 @@ public class BrickController : MonoBehaviour
         {
             HandleBallHit(null, Vector2.up); // Fallback with upward normal
         }
+    }
+
+    private void SpawnCoins()
+    {
+        Debug.Log($"[BrickController] Attempting to spawn coins at brick position: {transform.position}");
+
+        // Check if CoinSpawner exists before trying to spawn
+        if (CoinSpawner.Instance == null)
+        {
+            Debug.LogError("[BrickController] CoinSpawner.Instance is NULL! No CoinSpawner GameObject found in scene!");
+            Debug.LogError("[BrickController] SOLUTION: Create an empty GameObject named 'CoinSpawner' and add the CoinSpawner script to it!");
+            return;
+        }
+
+        Debug.Log("[BrickController] CoinSpawner found, calling SpawnCoinsAtPosition...");
+
+        // Spawn coins at this brick's position using the CoinSpawner
+        CoinSpawner.SpawnCoinsAtPosition(transform.position);
+
+        Debug.Log($"[BrickController] Coin spawning request sent for position: {transform.position}");
     }
 }
