@@ -70,7 +70,33 @@ public class BrickController : MonoBehaviour
         yield return new WaitForFixedUpdate();
         yield return new WaitForFixedUpdate(); // Wait 2 physics frames to be safe
 
-        Debug.Log("Brick destroyed");
+        Debug.Log($"[BrickController] Brick {gameObject.name} being destroyed");
+
+        // Notify the GameManager that a brick has been destroyed
+        if (GameManager.Instance != null)
+        {
+            Debug.Log($"[BrickController] Notifying GameManager about brick {gameObject.name} destruction");
+            GameManager.Instance.OnBrickDestroyed();
+        }
+        else
+        {
+            Debug.LogError("[BrickController] GameManager.Instance is NULL! Cannot notify about brick destruction!");
+            Debug.LogError("[BrickController] SOLUTION: Create an empty GameObject in your scene and add the GameManager script to it!");
+
+            // Try to find GameManager component in scene as fallback
+            GameManager foundManager = FindObjectOfType<GameManager>();
+            if (foundManager != null)
+            {
+                Debug.LogWarning("[BrickController] Found GameManager component but Instance is not set! This suggests Awake() hasn't run yet.");
+                foundManager.OnBrickDestroyed();
+            }
+            else
+            {
+                Debug.LogError("[BrickController] No GameManager component found in the scene at all!");
+            }
+        }
+
+        Debug.Log($"[BrickController] Destroying GameObject {gameObject.name}");
         Destroy(gameObject);
     }
 

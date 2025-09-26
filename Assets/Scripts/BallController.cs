@@ -37,6 +37,12 @@ public class BallController : MonoBehaviour
 
     void FixedUpdate()  // Changed from Update to FixedUpdate for physics
     {
+        // Check if the game is still active
+        if (GameManager.Instance != null && !GameManager.Instance.IsGameActive())
+        {
+            return; // Don't update ball physics if game is not active
+        }
+
         // Ensure the ball maintains consistent speed and direction
         Vector2 currentVelocity = rb.linearVelocity;
 
@@ -131,10 +137,14 @@ public class BallController : MonoBehaviour
     {
         if (other.gameObject.CompareTag("BottomBoundry"))
         {
-            // ball hit the bottom boundary, end the game
-            Debug.Log("Game over!");
-            audioSource.Play();
-            // you can add additional game over logic here, such as showing a game over screen or resetting the game
+            // Check if the game is still active (don't trigger game over if level is complete)
+            if (GameManager.Instance != null && GameManager.Instance.IsGameActive())
+            {
+                // ball hit the bottom boundary, end the game
+                Debug.Log("Game over!");
+                audioSource.Play();
+                // you can add additional game over logic here, such as showing a game over screen or resetting the game
+            }
         }
     }
 
