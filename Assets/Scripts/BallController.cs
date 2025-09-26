@@ -11,6 +11,7 @@ public class BallController : MonoBehaviour
     private Rigidbody2D rb; // rigidbody component of the ball
     private Vector2 direction = Vector2.up; // current direction of the ball's movement
     private AudioSource audioSource; // audio source component
+    private float lastBrickHitTime = -1f; // Track when we last hit a brick
 
     void Start()
     {
@@ -19,7 +20,7 @@ public class BallController : MonoBehaviour
 
         audioSource = GetComponent<AudioSource>();
 
-        // Enhanced collision detection settings
+        // Enhanced collision detection settings for fast-moving objects
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
@@ -27,17 +28,49 @@ public class BallController : MonoBehaviour
         rb.gravityScale = 0f;
         rb.linearDamping = 0f;
         rb.angularDamping = 0f;
+
+        // Ensure the ball doesn't go to sleep during gameplay
+        rb.sleepMode = RigidbodySleepMode2D.NeverSleep;
+
+        Debug.Log("Ball initialized with Continuous collision detection");
     }
 
     void FixedUpdate()  // Changed from Update to FixedUpdate for physics
     {
-        // Move the ball using physics instead of direct position manipulation
-        rb.linearVelocity = direction * moveSpeed;
+        // Ensure the ball maintains consistent speed and direction
+        Vector2 currentVelocity = rb.linearVelocity;
+
+        // If velocity is significantly different from intended direction, correct it
+        if (Vector2.Angle(currentVelocity.normalized, direction) > 5f ||
+            Mathf.Abs(currentVelocity.magnitude - moveSpeed) > 0.5f)
+        {
+            rb.linearVelocity = direction * moveSpeed;
+        }
 
         // Clamp the velocity to prevent excessive speed
         if (rb.linearVelocity.magnitude > maxSpeed)
         {
-            rb.linearVelocity = rb.linearVelocity.normalized * maxSpeed;
+            direction = rb.linearVelocity.normalized;
+            rb.linearVelocity = direction * maxSpeed;
+        }
+
+        // Prevent the ball from getting stuck by ensuring minimum speed
+        if (rb.linearVelocity.magnitude < moveSpeed * 0.8f)
+        {
+            rb.linearVelocity = direction * moveSpeed;
+        }
+
+        // Safety check: Detect if ball might be stuck in an object
+        // Cast a ray in the direction of movement to detect potential collisions
+        RaycastHit2D hit = Physics2D.Raycast(transform.position, direction, 0.5f);
+        if (hit.collider != null && hit.collider.CompareTag("Brick"))
+        {
+            // If we're about to hit a brick but moving too fast, we might pass through
+            if (rb.linearVelocity.magnitude > moveSpeed * 1.2f)
+            {
+                Debug.Log("High speed detected near brick - correcting velocity");
+                rb.linearVelocity = direction * moveSpeed;
+            }
         }
 
         // Check if the ball is gone (below a certain point)
@@ -49,6 +82,12 @@ public class BallController : MonoBehaviour
 
     void OnCollisionEnter2D(Collision2D collision)
     {
+        // Ensure we have valid collision data
+        if (collision.contacts == null || collision.contacts.Length == 0)
+            return;
+
+        Vector2 collisionNormal = collision.contacts[0].normal;
+
         // if the ball hits the player, deflect it based on the point of contact
         if (collision.gameObject.CompareTag("Player"))
         {
@@ -68,25 +107,24 @@ public class BallController : MonoBehaviour
             }
 
             direction = newDirection;
+            // Apply the new velocity immediately to ensure responsive physics
+            rb.linearVelocity = direction * moveSpeed;
         }
-        // if the ball hits a brick, destroy the brick and deflect the ball
-        else if (collision.gameObject.CompareTag("Brick"))
+        // Brick collisions are COMPLETELY handled by BrickController
+        // Ball ignores brick collisions to prevent double processing
+        else if (!collision.gameObject.CompareTag("Brick"))
         {
-            // Destroy the brick
-            BrickController brickController = collision.gameObject.GetComponent<BrickController>();
-            brickController.DestroyBrick();
-
-            // Deflect the ball based on the collision normal
-            DeflectBall(collision.contacts[0].normal);
+            // Handle collisions with walls, boundaries, and other objects
+            DeflectBall(collisionNormal);
+            rb.linearVelocity = direction * moveSpeed;
         }
-        // if the ball hits any other object, deflect it based on the surface normal
-        else
-        {
-            DeflectBall(collision.contacts[0].normal);
-        }
+        // Note: Brick collisions are ignored here - they're handled by BrickController only
 
         // play a sound effect when the ball hits something
-        audioSource.Play();
+        if (audioSource != null)
+        {
+            audioSource.Play();
+        }
     }
 
     void OnTriggerEnter2D(Collider2D other)
@@ -102,11 +140,59 @@ public class BallController : MonoBehaviour
 
     private void DeflectBall(Vector2 normal)
     {
+        // Ensure the normal is valid and normalized
+        if (normal.magnitude < 0.1f)
+        {
+            // Fallback to a default upward normal if collision normal is invalid
+            normal = Vector2.up;
+        }
+        else
+        {
+            normal = normal.normalized;
+        }
+
         // reflect the direction of the ball's movement based on the surface normal
-        direction = Vector2.Reflect(direction, normal).normalized;
+        Vector2 newDirection = Vector2.Reflect(direction, normal).normalized;
+
+        // Ensure the new direction isn't too shallow (prevents near-horizontal bounces)
+        if (Mathf.Abs(newDirection.y) < 0.1f)
+        {
+            newDirection.y = newDirection.y > 0 ? 0.1f : -0.1f;
+            newDirection = newDirection.normalized;
+        }
+
+        direction = newDirection;
     }
 
-    void RestartGame()
+    // Public method for brick to call when handling collision
+    public void HandleBrickCollision(Vector2 collisionNormal)
+    {
+        // Prevent rapid successive brick hits (should not happen with new system, but extra safety)
+        if (Time.fixedTime - lastBrickHitTime < 0.05f)
+        {
+            Debug.Log("Ignoring rapid successive brick hit");
+            return;
+        }
+
+        lastBrickHitTime = Time.fixedTime;
+
+        // Store previous direction for comparison
+        Vector2 previousDirection = direction;
+
+        // Immediately deflect the ball
+        DeflectBall(collisionNormal);
+
+        // Apply the new velocity immediately to ensure the ball bounces
+        rb.linearVelocity = direction * moveSpeed;
+
+        // Play sound if available
+        if (audioSource != null)
+        {
+            audioSource.Play();
+        }
+
+        Debug.Log($"Ball bounced: Previous dir = {previousDirection}, New dir = {direction}, Velocity = {rb.linearVelocity}");
+    }    void RestartGame()
     {
         // Reset the ball's position to the starting position
         transform.position = new Vector3(0, -4, 0);
